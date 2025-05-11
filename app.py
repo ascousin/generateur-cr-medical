@@ -2,86 +2,90 @@ import openai
 client = openai.OpenAI(api_key=st.session_state.api_key)
 import streamlit as st
 import fitz  # PyMuPDF
-import io
-import openai
+import os
 from docx import Document
+from tempfile import NamedTemporaryFile
 
-st.set_page_config(page_title="Générateur de compte-rendus médicaux", layout="centered")
+try:
+    import openai
+except ImportError:
+    st.error("Le module openai est introuvable. Vérifie ton fichier requirements.txt ou installe-le.")
+
+# Interface
+st.set_page_config(page_title="Générateur de compte-rendus médicaux", page_icon="🩺")
 st.title("🩺 Générateur de compte-rendus médicaux")
 
+# API Key
 openai_api_key = st.text_input("Clé API OpenAI", type="password")
-uploaded_note = st.file_uploader("Sélectionnez une note médicale (PDF)", type=["pdf"])
-generate_btn = st.button("Générer le compte-rendu")
 
-# Chargement des exemples (ex1, ex2) 
-def get_examples():
-    examples = []
-    for i in [1, 2]:
-        with open(f"ex{i}_note.pdf", "rb") as f:
-            note_text = extract_text_from_pdf(f)
-        with open(f"ex{i}_cr.docx", "rb") as f:
-            cr_text = extract_text_from_docx(f)
-        examples.append((note_text, cr_text))
-    return examples
+# Upload du fichier PDF
+uploaded_file = st.file_uploader("Sélectionnez une note médicale (PDF)", type=["pdf"])
 
-def extract_text_from_pdf(pdf_file):
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
+# Fonction : lire texte depuis PDF
+def extract_text_from_pdf(file) -> str:
+    with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(file.read())
+        tmp_path = tmp_file.name
 
-def extract_text_from_docx(docx_file):
-    document = Document(docx_file)
+    doc = fitz.open(tmp_path)
     texte = ""
-    for p in document.paragraphs:
-        texte += p.text + "\n"
+    for page in doc:
+        texte += page.get_text()
+    os.remove(tmp_path)
     return texte
 
-def generate_prompt(examples, new_note):
-    prompt = "Voici des exemples de transformation de notes médicales en textes de compte-rendu :\n\n"
-    for i, (note, cr) in enumerate(examples):
-        prompt += f"Exemple {i+1} - Note :\n{note}\nCompte-rendu :\n{cr}\n\n"
+# Exemples témoins
+EXEMPLES = [
+    {
+        "note": open("ex1_note.pdf", "rb").read(),
+        "cr": Document("ex1_cr.docx").paragraphs
+    },
+    {
+        "note": open("ex2_note.pdf", "rb").read(),
+        "cr": Document("ex2_cr.docx").paragraphs
+    }
+]
+
+def format_examples():
+    exemples = []
+    for ex in EXEMPLES:
+        note_text = extract_text_from_pdf(file=ex["note"])
+        cr_text = "\n".join([p.text for p in ex["cr"]])
+        exemples.append((note_text, cr_text))
+    return exemples
+
+# Prompt complet
+def build_prompt(exemples, new_note_text):
+    prompt = "Voici des exemples de transformation de notes médicales en texte de compte-rendu :\n\n"
+    for i, (note, cr) in enumerate(exemples):
+        prompt += f"Exemple {i+1} – Note :\n{note}\nCompte-rendu :\n{cr}\n\n"
     prompt += "Voici une nouvelle note à transformer :\n"
-    prompt += new_note
+    prompt += new_note_text
     prompt += "\n\nMerci de rédiger uniquement le texte principal du compte-rendu, sans en-tête, nom, date ni signature."
     return prompt
 
-if generate_btn and uploaded_note and openai_api_key:
-    with st.spinner("Lecture de la note et génération..."):
-        examples = get_examples()
-        note_text = extract_text_from_pdf(uploaded_note)
-        prompt = generate_prompt(examples, note_text)
+# Bouton de génération
+if st.button("Générer le compte-rendu"):
+    if not uploaded_file:
+        st.error("Veuillez sélectionner un fichier PDF.")
+    elif not openai_api_key:
+        st.error("Veuillez renseigner votre clé API OpenAI.")
+    else:
+        with st.spinner("Génération en cours..."):
+            try:
+                note_text = extract_text_from_pdf(uploaded_file)
+                exemples = format_examples()
+                prompt = build_prompt(exemples, note_text)
 
-        try:
-    import openai
-    client = openai.OpenAI(api_key=openai_api_key)
+                openai.api_key = openai_api_key
+                response = openai.ChatCompletion.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3
+                )
+                result = response.choices[0].message["content"].strip()
+                st.success("Compte-rendu généré :")
+                st.text_area("Résultat", result, height=400)
+            except Exception as e:
+                st.error(f"Erreur lors de la génération : {str(e)}")
 
-    response = client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.3
-)
-result = response.choices[0].message.content.strip()
-
-
-            st.success("Compte-rendu généré !")
-            st.subheader("📝 Résultat")
-            st.text_area("Texte du compte-rendu", result, height=300)
-
-            # Générer fichier docx
-            doc = Document()
-            doc.add_paragraph(result)
-            buffer = io.BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                label="📂 Télécharger en .docx",
-                data=buffer,
-                file_name="compte_rendu.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-
-        except Exception as e:
-            st.error(f"Erreur lors de la génération : {e}")
