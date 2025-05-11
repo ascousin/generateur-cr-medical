@@ -1,4 +1,4 @@
 streamlit
-openai>=1.2.0
+openai==0.28
 python-docx
 PyMuPDF
