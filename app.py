@@ -83,3 +83,4 @@ if st.button("Générer le compte-rendu"):
                 st.text_area("Résultat", result, height=400)
             except Exception as e:
                 st.error(f"Erreur lors de la génération : {str(e)}")
+
