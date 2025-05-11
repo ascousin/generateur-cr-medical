@@ -54,10 +54,10 @@ if generate_btn and uploaded_note and openai_api_key:
         prompt = generate_prompt(examples, note_text)
 
         try:
-import openai
-client = openai.OpenAI(api_key=openai_api_key)
+    import openai
+    client = openai.OpenAI(api_key=openai_api_key)
 
-response = client.chat.completions.create(
+    response = client.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": prompt}],
     temperature=0.3
