@@ -1,5 +1,3 @@
-import openai
-client = openai.OpenAI(api_key=st.session_state.api_key)
 import streamlit as st
 import fitz  # PyMuPDF
 import os
