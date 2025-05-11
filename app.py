@@ -15,9 +15,9 @@ openai_api_key = st.text_input("Clé API OpenAI", type="password")
 uploaded_file = st.file_uploader("Sélectionnez une note médicale (PDF)", type=["pdf"])
 
 # Lire un fichier PDF temporairement
-def extract_text_from_pdf(uploaded_file) -> str:
+def extract_text_from_pdf(file_bytes) -> str:
     with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(uploaded_file.getbuffer())
+        tmp.write(file_bytes)
         tmp_path = tmp.name
     doc = fitz.open(tmp_path)
     text = ""
@@ -26,7 +26,7 @@ def extract_text_from_pdf(uploaded_file) -> str:
     os.remove(tmp_path)
     return text
 
-# Exemples locaux (ne PAS appeler .read() ici)
+# Exemples locaux (lecture correcte des fichiers)
 EXEMPLES = [
     {
         "note_path": "ex1_note.pdf",
@@ -44,7 +44,7 @@ def format_examples():
     for ex in EXEMPLES:
         with open(ex["note_path"], "rb") as f:
             note_bytes = f.read()
-        note_text = extract_text_from_pdf(uploaded_file=note_bytes)
+        note_text = extract_text_from_pdf(note_bytes)
         cr_text = "\n".join([p.text for p in Document(ex["cr_path"]).paragraphs])
         exemples.append((note_text, cr_text))
     return exemples
@@ -59,7 +59,7 @@ def build_prompt(exemples, new_note_text):
     prompt += "\n\nMerci de rédiger uniquement le texte principal du compte-rendu, sans en-tête, nom, date ni signature."
     return prompt
 
-# Lancer génération
+# Bouton de génération
 if st.button("Générer le compte-rendu"):
     if not uploaded_file:
         st.error("Veuillez sélectionner un fichier PDF.")
@@ -67,7 +67,8 @@ if st.button("Générer le compte-rendu"):
         st.error("Veuillez renseigner votre clé API OpenAI.")
     else:
         try:
-            note_text = extract_text_from_pdf(uploaded_file)
+            file_bytes = uploaded_file.read()
+            note_text = extract_text_from_pdf(file_bytes)
             exemples = format_examples()
             prompt = build_prompt(exemples, note_text)
 
@@ -82,4 +83,3 @@ if st.button("Générer le compte-rendu"):
             st.text_area("Résultat", result, height=400)
         except Exception as e:
             st.error(f"Erreur lors de la génération : {str(e)}")
-
