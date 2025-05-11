@@ -1,3 +1,5 @@
+import openai
+client = openai.OpenAI(api_key=st.session_state.api_key)
 import streamlit as st
 import fitz  # PyMuPDF
 import io
@@ -52,13 +54,16 @@ if generate_btn and uploaded_note and openai_api_key:
         prompt = generate_prompt(examples, note_text)
 
         try:
-            openai.api_key = openai_api_key
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-            result = response.choices[0].message["content"].strip()
+import openai
+client = openai.OpenAI(api_key=openai_api_key)
+
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3
+)
+result = response.choices[0].message.content.strip()
+
 
             st.success("Compte-rendu généré !")
             st.subheader("📝 Résultat")
